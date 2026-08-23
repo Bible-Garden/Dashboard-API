@@ -1,5 +1,5 @@
 """
-Data export for public-api
+Data export for Bible-API
 
 GET /api/data[?translation=alias] — returns finalized data as JSON
 """
@@ -28,7 +28,7 @@ def get_data(
     api_key: bool = RequireAPIKey
 ):
     """
-    Data export for public-api
+    Data export for Bible-API
 
     Without parameter: all active translations + voices + voice_alignments with COALESCE
     With parameter: data for a single translation

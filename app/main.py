@@ -77,11 +77,11 @@ tags_metadata = [
     },
     {
         "name": "Data",
-        "description": "Data export for public-api",
+        "description": "Data export for Bible-API",
     },
     {
         "name": "Statistics",
-        "description": "API usage statistics from public-api",
+        "description": "API usage statistics from Bible-API",
     },
     {
         "name": "Admin",

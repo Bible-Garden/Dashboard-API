@@ -6,7 +6,7 @@ Audio files are stored in the following structure:
 <MP3_FILES_PATH>/<translation_alias>/<voice_alias>/mp3/<book_zerofill>/<chapter_zerofill>.mp3
 ```
 
-Where `link_template` is taken from the DB (`voices.link_template`) and placeholders are filled similarly to `/root/cep/php-parser/include.php:get_chapter_audio_url`.
+Where `link_template` is taken from the DB (`voices.link_template`) and placeholders are filled similarly to `/root/cep/bible-parser/include.php:get_chapter_audio_url`.
 
 Download script: `scripts/download_audio.py`.
 

@@ -8,7 +8,7 @@ expected folder structure:
   <output_root>/<translation_alias>/<voice_alias>/mp3/<book_zerofill>/<chapter_zerofill>.mp3
 
 The URL for each chapter is built by replacing `{placeholders}` in `link_template`
-(similar to `/root/cep/php-parser/include.php:get_chapter_audio_url`).
+(similar to `/root/cep/bible-parser/include.php:get_chapter_audio_url`).
 
 Some sources provide audio as per-book ZIP archives rather than per-chapter URLs.
 For such cases, this script contains small built-in handlers.

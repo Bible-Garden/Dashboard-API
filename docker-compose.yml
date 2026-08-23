@@ -1,6 +1,6 @@
 services:
-  admin-api:
-    container_name: admin-api
+  dashboard-api:
+    container_name: dashboard-api
     build: .
     ports:
       - "8085:8000"
