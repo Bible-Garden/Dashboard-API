@@ -1,8 +1,7 @@
 openapi: 3.1.0
 info:
-  title: Bible API
-  description: "API \u0434\u043B\u044F \u0440\u0430\u0431\u043E\u0442\u044B \u0441\
-    \ \u0431\u0438\u0431\u043B\u0438\u0435\u0439"
+  title: Admin API
+  description: Admin API for Bible Garden data management
   version: 0.1.0
 paths:
   /api/chapter_with_alignment:
@@ -10,18 +9,10 @@ paths:
       tags:
       - Excerpts
       summary: Get Chapter With Alignment
-      description: "\u041F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0433\u043B\u0430\
-        \u0432\u0443 \u0441 \u0432\u044B\u0440\u0430\u0432\u043D\u0438\u0432\u0430\
-        \u043D\u0438\u0435\u043C \u043F\u043E \u043D\u043E\u043C\u0435\u0440\u0443\
-        \ \u043A\u043D\u0438\u0433\u0438 \u0438 \u0433\u043B\u0430\u0432\u044B\n\n\
-        Args:\n    translation: \u041A\u043E\u0434 \u043F\u0435\u0440\u0435\u0432\u043E\
-        \u0434\u0430\n    book_number: \u041D\u043E\u043C\u0435\u0440 \u043A\u043D\
-        \u0438\u0433\u0438 (1-66)\n    chapter_number: \u041D\u043E\u043C\u0435\u0440\
-        \ \u0433\u043B\u0430\u0432\u044B\n    voice: \u041A\u043E\u0434 \u0433\u043E\
-        \u043B\u043E\u0441\u0430 (\u043E\u043F\u0446\u0438\u043E\u043D\u0430\u043B\
-        \u044C\u043D\u043E)\n\nReturns:\n    ExcerptWithAlignmentModel: \u0414\u0430\
-        \u043D\u043D\u044B\u0435 \u0433\u043B\u0430\u0432\u044B \u0441 \u0432\u044B\
-        \u0440\u0430\u0432\u043D\u0438\u0432\u0430\u043D\u0438\u0435\u043C"
+      description: "Get chapter with alignment by book and chapter number\n\nArgs:\n\
+        \    translation: Translation code\n    book_number: Book number (1-66)\n\
+        \    chapter_number: Chapter number\n    voice: Voice code (optional)\n\n\
+        Returns:\n    ExcerptWithAlignmentModel: Chapter data with alignment"
       operationId: get_chapter_with_alignment
       security:
       - APIKeyHeader: []
@@ -323,55 +314,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/about:
+  /api/data/manifest:
     get:
       tags:
-      - About
-      summary: Get About
-      description: "\u0418\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u044F \u043E\
-        \ \u043F\u0440\u043E\u0435\u043A\u0442\u0435 / About the project"
-      operationId: getAbout
+      - Data
+      summary: Get Data Manifest
+      description: "The plan of a full resync, small enough to hold in memory.\n\n\
+        Bible-API's full import used to be one 147 MB `GET /api/data`; on\n2026-08-30\
+        \ parsing it OOM-killed the production VM. The import now walks\nthe translations\
+        \ one at a time, and this endpoint is what tells it which\nones there are\
+        \ and how many rows each must end up with:\n\n- `languages` / `bible_books`\
+        \ \u2014 the reference tables in full (69 rows),\n  so the importer can write\
+        \ them before any translation;\n- `translations` \u2014 `code` and `alias`\
+        \ of every ACTIVE translation, the\n  work list (and, by omission, the list\
+        \ of translations to drop);\n- `counts.per_translation` / `counts.totals`\
+        \ \u2014 expected row counts per\n  table, the input of the importer's post-import\
+        \ verification.\n\nCounting is cheap (aggregates over indexed columns, no\
+        \ row transfer);\nthe response is a few kilobytes."
+      operationId: getDataManifest
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/AboutModel'
+              schema: {}
       security:
       - APIKeyHeader: []
-  /api/version-check:
+  /api/data:
     get:
       tags:
-      - Version
-      summary: Version Check
-      description: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0430\u043A\u0442\
-        \u0443\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u0438 \u0432\u0435\u0440\u0441\
-        \u0438\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F\
-        \ / App version check"
-      operationId: versionCheck
+      - Data
+      summary: Get Data
+      description: 'Data export for Bible-API
+
+
+        Without parameter: all active translations + voices + voice_alignments with
+        COALESCE
+
+        With parameter: data for a single translation'
+      operationId: getData
       security:
       - APIKeyHeader: []
       parameters:
-      - name: app_version
+      - name: translation
         in: query
-        required: true
+        required: false
         schema:
+          description: Translation alias (optional)
+          title: Translation
           type: string
-          description: "\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0432\u0435\u0440\
-            \u0441\u0438\u044F \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\
-            \u044F (semver, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 1.2.3)"
-          title: App Version
-        description: "\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0432\u0435\u0440\
-          \u0441\u0438\u044F \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\
-          \u044F (semver, \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 1.2.3)"
+        description: Translation alias (optional)
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
               schema:
-                $ref: '#/components/schemas/VersionCheckModel'
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/stats/summary:
+    get:
+      tags:
+      - Statistics
+      summary: Get Stats Summary
+      operationId: get_stats_summary
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 365
+          minimum: 1
+          default: 30
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/stats/recent:
+    get:
+      tags:
+      - Statistics
+      summary: Get Recent Requests
+      operationId: get_recent_requests
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
         '422':
           description: Validation Error
           content:
@@ -783,47 +841,6 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
-    AboutContactModel:
-      properties:
-        id:
-          type: string
-          title: Id
-        icon:
-          type: string
-          title: Icon
-        url:
-          type: string
-          title: Url
-        sort_order:
-          type: integer
-          title: Sort Order
-        label:
-          $ref: '#/components/schemas/LocalizedText'
-        subtitle:
-          $ref: '#/components/schemas/LocalizedText'
-      type: object
-      required:
-      - id
-      - icon
-      - url
-      - sort_order
-      - label
-      - subtitle
-      title: AboutContactModel
-    AboutModel:
-      properties:
-        contacts:
-          items:
-            $ref: '#/components/schemas/AboutContactModel'
-          type: array
-          title: Contacts
-        about_text:
-          $ref: '#/components/schemas/LocalizedText'
-      type: object
-      required:
-      - contacts
-      - about_text
-      title: AboutModel
     AnomalyStatus:
       type: string
       enum:
@@ -918,23 +935,6 @@ components:
       - name_en
       - name_national
       title: LanguageModel
-    LocalizedText:
-      properties:
-        en:
-          type: string
-          title: En
-        ru:
-          type: string
-          title: Ru
-        uk:
-          type: string
-          title: Uk
-      type: object
-      required:
-      - en
-      - ru
-      - uk
-      title: LocalizedText
     LoginRequest:
       properties:
         username:
@@ -1263,29 +1263,6 @@ components:
       - end
       - start_paragraph
       title: VerseWithAlignmentModel
-    VersionCheckModel:
-      properties:
-        update_type:
-          type: string
-          enum:
-          - none
-          - soft
-          - hard
-          title: Update Type
-        latest_version:
-          type: string
-          title: Latest Version
-        store_url:
-          type: string
-          title: Store Url
-        message:
-          type: null
-      type: object
-      required:
-      - update_type
-      - latest_version
-      - store_url
-      title: VersionCheckModel
     VoiceAnomaliesResponseModel:
       properties:
         items:
@@ -1548,9 +1525,7 @@ components:
       scheme: bearer
 tags:
 - name: Auth
-  description: "\u0410\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u044F\
-    \ \u0438 \u0430\u0443\u0442\u0435\u043D\u0442\u0438\u0444\u0438\u043A\u0430\u0446\
-    \u0438\u044F"
+  description: Authorization and authentication
 - name: Languages
   description: ''
 - name: Translations
@@ -1561,14 +1536,9 @@ tags:
   description: ''
 - name: Audio
   description: Streaming & Download mp3
-- name: About
-  description: "\u0418\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u044F \u043E\
-    \ \u043F\u0440\u043E\u0435\u043A\u0442\u0435"
-- name: Version
-  description: "\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0432\u0435\u0440\
-    \u0441\u0438\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F"
+- name: Data
+  description: Data export for Bible-API
+- name: Statistics
+  description: API usage statistics from Bible-API
 - name: Admin
-  description: "\u0410\u0434\u043C\u0438\u043D\u0438\u0441\u0442\u0440\u0430\u0442\
-    \u0438\u0432\u043D\u044B\u0435 \u043E\u043F\u0435\u0440\u0430\u0446\u0438\u0438\
-    \ (\u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044F JWT \u0442\u043E\u043A\
-    \u0435\u043D)"
+  description: Administrative operations (JWT token required)
