@@ -441,8 +441,52 @@ async def get_chapter_with_alignment(translation: int, book_number: int, chapter
         connection.close()
 
 
-@router.get('/excerpt_with_alignment', response_model=ExcerptWithAlignmentModel, operation_id="get_excerpt_with_alignment", responses={422: {"model": SimpleErrorResponse}}, tags=["Excerpts"])
+# Grammar of the `excerpt` parameter: a book alias, a chapter and an optional
+# verse or verse range — `gen 1`, `gen 1:1`, `gen 1:1-3`. Several references may
+# be listed in one string, so the pattern is *scanned* for rather than matched
+# against the whole value.
+#
+# The book token is Latin letters and digits taken as a WHOLE token: the
+# look-behind stops a match from starting in the middle of a word. Until
+# 2026-09-05 the token was `[0-9a-z]+` with no boundary, so `Gen 1:1` matched
+# the substring `en` and answered "Book with alias 'en' not found"
+# (ClickUp 86cbehfqx). Case is folded in Python before the lookup rather than
+# left to the database collation, so `Gen`, `GEN` and `gen` are one alias
+# whatever `bible_books` happens to be collated as.
+#
+# A book name in any other script (`Бут 1:1`) matches nothing and is a 422 that
+# names the expected format: by Maria's decision of 2026-09-05 the contract is
+# the Latin alias from the books catalogue only — the client never lets a human
+# type this value, it copies it from `GET /api/translations/{code}/books`.
+# Mirrors Bible-API `app/excerpt.py`.
+EXCERPT_PATTERN = re.compile(
+    r'(?<![A-Za-z0-9])(?P<book>[A-Za-z0-9]+) (?P<chapter>\d+)'
+    r'(:(?P<start_verse>\d+)(?:-(?P<end_verse>\d+))?)?'
+)
+
+EXCERPT_FORMAT_HINT = (
+    "Expected '<book alias> <chapter>[:<verse>[-<verse>]]', e.g. 'gen 1:1-3'. "
+    "The book alias is the Latin `alias` of "
+    "GET /api/translations/{code}/books; letter case does not matter."
+)
+
+
+@router.get('/excerpt_with_alignment', response_model=ExcerptWithAlignmentModel, operation_id="get_excerpt_with_alignment", responses={404: {"model": SimpleErrorResponse}, 422: {"model": SimpleErrorResponse}}, tags=["Excerpts"])
 async def get_excerpt_with_alignment(translation: int, excerpt: str, voice: Optional[int] = None, api_key: bool = RequireAPIKey):
+    """
+    Text of one or more references with word-level audio timing.
+
+    `excerpt` is `<book alias> <chapter>[:<verse>[-<verse>]]`, e.g. `gen 1`,
+    `gen 1:1` or `gen 1:1-3`; several references may be listed in one value.
+
+    The book is addressed by its **alias as returned by
+    `GET /api/translations/{code}/books`** — Latin letters and digits,
+    **case-insensitive** (`gen`, `Gen` and `GEN` are the same book). A book
+    name written in any other script, or in any other spelling than the
+    catalogue's aliases, is not part of the contract: a value that does not
+    parse is a `422` naming the expected format, and an alias that parses but
+    belongs to no book of this translation is a `404`.
+    """
     connection = create_connection()
     cursor = connection.cursor(dictionary=True)
     try:
@@ -452,21 +496,19 @@ async def get_excerpt_with_alignment(translation: int, excerpt: str, voice: Opti
         is_single_chapter = True
         book_name = ''
 
-        # Regex for parsing the excerpt string
-        pattern = r'(?P<book>[0-9a-z]+) (?P<chapter>\d+)(:(?P<start_verse>\d+)(?:-(?P<end_verse>\d+))?)?'
-        
-        matches = list(re.finditer(pattern, excerpt))
-        
+        matches = list(EXCERPT_PATTERN.finditer(excerpt))
+
         if not matches:
             raise HTTPException(
                 status_code=422,
-                detail=f"Invalid excerpt format ({excerpt})."
+                detail=f"Invalid excerpt format ({excerpt}). {EXCERPT_FORMAT_HINT}"
             )
 
         parts = []
 
         for match in matches:
-            book_alias = match.group('book')
+            # One alias, whatever case it was written in.
+            book_alias = match.group('book').casefold()
             chapter_number = int(match.group('chapter'))
             start_verse = match.group('start_verse')
             end_verse = match.group('end_verse')
@@ -475,7 +517,7 @@ async def get_excerpt_with_alignment(translation: int, excerpt: str, voice: Opti
             books_info_list = get_books_info(cursor, translation, book_alias)
             if not books_info_list:
                 raise HTTPException(
-                    status_code=422, 
+                    status_code=404,
                     detail=f"Book with alias '{book_alias}' not found for translation {translation}."
                 )
             book_info = books_info_list[0]
@@ -559,8 +601,15 @@ def get_books_info(cursor: any, translation: int, alias: str=None):
         WHERE tb.translation = %(translation)s
     '''
     if alias:
-        sql += ''' AND (bb.code1 = %(alias)s OR bb.code2 = %(alias)s OR bb.code3 = %(alias)s OR bb.code4 = %(alias)s OR bb.code5 = %(alias)s
-                      OR bb.short_name_en = %(alias)s OR bb.short_name_ru = %(alias)s)
+        # The catalogue aliases only. `bb.short_name_en` / `bb.short_name_ru`
+        # were matched here as well until 2026-09-05 (ClickUp 86cbehfqx): the
+        # Russian one is unreachable — the grammar never lets a Cyrillic token
+        # through — and the English one made 14 books answer to a second,
+        # undocumented name (`mt`, `jn`, `ex`, `1kings`, …) that
+        # `GET /api/translations/{code}/books` does not publish. Verified on the
+        # live `cep_admin` and `cep_public` before removing them: no value of
+        # `code1..code5` belongs to two different books, case-insensitively.
+        sql += ''' AND (bb.code1 = %(alias)s OR bb.code2 = %(alias)s OR bb.code3 = %(alias)s OR bb.code4 = %(alias)s OR bb.code5 = %(alias)s)
         '''
         params['alias'] = alias
     cursor.execute(sql, params)
