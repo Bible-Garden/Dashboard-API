@@ -329,8 +329,14 @@ paths:
         \ of every ACTIVE translation, the\n  work list (and, by omission, the list\
         \ of translations to drop);\n- `counts.per_translation` / `counts.totals`\
         \ \u2014 expected row counts per\n  table, the input of the importer's post-import\
-        \ verification.\n\nCounting is cheap (aggregates over indexed columns, no\
-        \ row transfer);\nthe response is a few kilobytes."
+        \ verification.\n- `index` (ClickUp 86cbegwqg) \u2014 the same report for\
+        \ the RAG index that\n  `GET /api/data/index` ships: the versions in use,\
+        \ row counts per\n  translation (embeddings broken down by version) and `chunks_digest`,\n\
+        \  an order-independent digest of each translation's chunk set. It lets\n\
+        \  the importer see, before downloading ~29 MiB a translation, which\n  translations\
+        \ are indexed at all and which ones its own `cep_public`\n  already holds\
+        \ unchanged.\n\nCounting is cheap (aggregates over indexed columns, no row\
+        \ transfer);\nthe response is a few kilobytes."
       operationId: getDataManifest
       responses:
         '200':
@@ -340,6 +346,116 @@ paths:
               schema: {}
       security:
       - APIKeyHeader: []
+  /api/data/index:
+    get:
+      tags:
+      - Data
+      summary: Get Data Index
+      description: "The RAG index of one translation, so a production resync carries\
+        \ the\nindex along with the text instead of a hand-made dump (ClickUp 86cbegwqg).\n\
+        \nRead straight out of the local `cep_public` (`PUBLIC_DB_NAME`), where\n\
+        Bible-API's CLIs write it; nothing is copied into `cep_admin`. BM25 is not\n\
+        exported \u2014 it is rebuilt in-process from the chunks.\n\n**Pagination\
+        \ covers `chunk_embeddings` only.** They are ~5.6 KB per row\n(base64 of a\
+        \ 4 KiB vector) against ~0.7 KB for a chunk and ~0.1 KB for a\nPsalm mapping,\
+        \ so they alone decide the body size: one translation is\n~29 MiB whole. `translation_chunks`\
+        \ and `psalm_verse_mappings` come back\n**in full on the first page (`offset=0`)\
+        \ and as `null` on every later\npage** \u2014 `null`, not `[]`, so that \"\
+        this page does not carry them\" cannot\nbe read as \"this translation has\
+        \ none\". The alternative (an offset per\ntable) would make the caller track\
+        \ three cursors to save one round of\n~3 MB.\n\nBecause the first page carries\
+        \ that corpus (5.0\u20137.8 MiB) on top of its\nembeddings, `limit` is clipped\
+        \ there to 600 rows and elsewhere to 2000, so\nthat **no page exceeds ~11\
+        \ MiB** on a production VM that parses it into\nPython. The clipping is in\
+        \ the body, not silent: `limit` echoes what was\nasked, `limit_applied` is\
+        \ what the page may carry, and `next_offset`\nfollows `limit_applied` \u2014\
+        \ walking by `next_offset` never skips a row.\n\n`vector` is the stored BLOB\
+        \ in **base64**, not a list of floats: the bytes\nare what the reader mmaps,\
+        \ base64 costs 33% against ~600% for JSON floats,\nand a float round-trip\
+        \ could not promise byte-identity. `dims` travels in\nthe same row, so a decoded\
+        \ vector can be checked against `dims * 4` bytes.\n\nRefusals name their reason\
+        \ before anything is selected: unknown alias 404,\nunknown version 409 with\
+        \ `available_versions`, unreachable index database\n500 naming the database\
+        \ and `PUBLIC_DB_NAME`."
+      operationId: getDataIndex
+      security:
+      - APIKeyHeader: []
+      parameters:
+      - name: translation
+        in: query
+        required: true
+        schema:
+          type: string
+          description: Translation alias (required)
+          title: Translation
+        description: Translation alias (required)
+      - name: embedding_version
+        in: query
+        required: true
+        schema:
+          type: string
+          description: 'Index version of the embeddings to ship, e.g. ''c3:BAAI/bge-m3@1024''.
+            Required: shipping two versions at once would double the body, and picking
+            one in code would hide which index production ended up with.'
+          title: Embedding Version
+        description: 'Index version of the embeddings to ship, e.g. ''c3:BAAI/bge-m3@1024''.
+          Required: shipping two versions at once would double the body, and picking
+          one in code would hide which index production ended up with.'
+      - name: chunking_version
+        in: query
+        required: false
+        schema:
+          description: 'Pin the chunk set to this chunking version (default: no filter)'
+          title: Chunking Version
+          type: integer
+        description: 'Pin the chunk set to this chunking version (default: no filter)'
+      - name: mapping_version
+        in: query
+        required: false
+        schema:
+          description: 'Pin the Psalm map to this mapping version (default: no filter)'
+          title: Mapping Version
+          type: integer
+        description: 'Pin the Psalm map to this mapping version (default: no filter)'
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 1
+          description: "Embedding rows per page. Clipped to the page's byte budget\
+            \ \u2014 600 on the first page, which also carries the corpus, 2000 afterwards;\
+            \ the body reports the effective value as `limit_applied` and `next_offset`\
+            \ follows it."
+          default: 2000
+          title: Limit
+        description: "Embedding rows per page. Clipped to the page's byte budget \u2014\
+          \ 600 on the first page, which also carries the corpus, 2000 afterwards;\
+          \ the body reports the effective value as `limit_applied` and `next_offset`\
+          \ follows it."
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          description: Embedding rows to skip
+          default: 0
+          title: Offset
+        description: Embedding rows to skip
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/data:
     get:
       tags:
